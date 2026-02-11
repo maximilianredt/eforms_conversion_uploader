@@ -81,10 +81,10 @@ cp .env.example .env
 cp ../dbt/bigquery_service_key.json ./google_ads_sa_key.json
 
 # 3. Test locally with dry run
-export $(cat .env | xargs) && DRY_RUN=true python main.py
+set -a && source .env && set +a && DRY_RUN=true python main.py
 
 # 4. Test locally (live)
-export $(cat .env | xargs) && python main.py
+set -a && source .env && set +a && python main.py
 
 # 5. Deploy to Cloud Run
 ./deploy.sh

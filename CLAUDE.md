@@ -81,12 +81,12 @@ Key env vars (see `.env.example` for full list):
 
 ### Test locally
 ```bash
-export $(cat .env | xargs) && python main.py
+set -a && source .env && set +a && python main.py
 ```
 
 ### Test with dry run
 ```bash
-export $(cat .env | xargs) && DRY_RUN=true python main.py
+set -a && source .env && set +a && DRY_RUN=true python main.py
 ```
 
 ### Deploy
