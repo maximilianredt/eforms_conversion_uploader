@@ -6,11 +6,11 @@ Syncs offline conversion data from BigQuery to Google Ads and Microsoft Ads. Run
 
 | Event | Value | Conversion Action |
 |-------|-------|-------------------|
-| Trial Start | $0 | Trial Start |
-| Monthly Subscription | Actual payment | Monthly Subscription |
-| Yearly Subscription | Actual payment | Yearly Subscription |
-| Document Purchase | Actual payment | Document Purchase |
-| Chat Purchase | Actual payment | Chat Purchase |
+| Trial Start | $0 | Trial Start DWH |
+| Monthly Subscription | Actual payment | Monthly Subscription DWH |
+| Yearly Subscription | Actual payment | Yearly Subscription DWH |
+| Document Purchase | Actual payment | Document Purchase DWH |
+| Chat Purchase | Actual payment | Chat Purchase DWH |
 | Refunds | Retraction on original action | (original action) |
 
 ## How It Works
@@ -30,21 +30,26 @@ In Google Ads UI:
 1. Go to **Goals > Conversions > Summary**
 2. Click **+ New conversion action**
 3. Select **Import > Other data sources or CRMs > Track conversions from clicks**
-4. Create these conversion actions (names must match env vars exactly):
-   - `Trial Start` (Category: Other, Value: Use the value from the conversion)
-   - `Monthly Subscription` (Category: Purchase, Value: Use the value from the conversion)
-   - `Yearly Subscription` (Category: Purchase, Value: Use the value from the conversion)
-   - `Document Purchase` (Category: Purchase, Value: Use the value from the conversion)
-   - `Chat Purchase` (Category: Purchase, Value: Use the value from the conversion)
+4. Create these conversion actions (names must match exactly):
+   - `Trial Start DWH` (Category: Other, Value: Use the value from the conversion)
+   - `Monthly Subscription DWH` (Category: Purchase, Value: Use the value from the conversion)
+   - `Yearly Subscription DWH` (Category: Purchase, Value: Use the value from the conversion)
+   - `Document Purchase DWH` (Category: Purchase, Value: Use the value from the conversion)
+   - `Chat Purchase DWH` (Category: Purchase, Value: Use the value from the conversion)
 5. For each action, ensure **Include in "Conversions"** is set appropriately
 
-### 2. Google Ads: OAuth Credentials
+### 2. Google Ads: Service Account Access
 
-1. Go to [Google Cloud Console > APIs & Services > Credentials](https://console.cloud.google.com/apis/credentials)
-2. Create an OAuth 2.0 Client ID (Desktop application type)
-3. Note the **Client ID** and **Client Secret**
-4. Get a **Developer Token** from your [Google Ads API Center](https://ads.google.com/aw/apicenter)
-5. Generate a **Refresh Token** using the [OAuth Playground](https://developers.google.com/oauthplayground/) or the `google-ads` library's authentication helper
+This project uses a **service account** for Google Ads API authentication (same key as the dbt project).
+
+1. Get a **Developer Token** from your [Google Ads API Center](https://ads.google.com/aw/apicenter)
+2. Copy the service account key: `cp ../dbt/bigquery_service_key.json ./google_ads_sa_key.json`
+3. Add the service account email as a user in Google Ads:
+   - Go to **Admin > Access and security**
+   - Click **+** to add a new user
+   - Paste the service account email (find it in `google_ads_sa_key.json` under `client_email`)
+   - Grant **Standard** access level
+4. Set `GOOGLE_ADS_SA_EMAIL` in `.env` to the email of the Google Ads user the service account should impersonate (typically the admin email that has access to the account)
 
 ### 3. Microsoft Ads: Create Offline Conversion Goals
 
@@ -53,21 +58,17 @@ In Microsoft Ads UI:
 1. Go to **Tools > Conversion tracking > Conversion goals**
 2. Click **Create conversion goal**
 3. Select **Offline conversions** as the type
-4. Create these goals (names must match env vars exactly):
-   - `Trial Start`
-   - `Monthly Subscription`
-   - `Yearly Subscription`
-   - `Document Purchase`
-   - `Chat Purchase`
+4. Create these goals (names must match exactly):
+   - `Trial Start DWH`
+   - `Monthly Subscription DWH`
+   - `Yearly Subscription DWH`
+   - `Document Purchase DWH`
+   - `Chat Purchase DWH`
 5. Wait **at least 2 hours** after creating goals before uploading conversions
 
 ### 4. Microsoft Ads: OAuth Credentials
 
-1. Register an app in [Azure Portal > App registrations](https://portal.azure.com/#blade/Microsoft_AAD_RegisteredApps/ApplicationsListBlade)
-2. Note the **Client ID** and create a **Client Secret**
-3. Get a **Developer Token** from [Microsoft Advertising Developer Portal](https://developers.ads.microsoft.com/)
-4. Generate a **Refresh Token** via the OAuth flow
-5. Find your **Customer ID** and **Account ID** in Microsoft Ads
+This project uses the **same OAuth credentials** as `../bing_ads_importer/`. Copy the values for `MS_DEV_TOKEN`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, and `MS_REFRESH_TOKEN` from the bing_ads_importer `.env` file.
 
 ## Setup
 
@@ -76,11 +77,16 @@ In Microsoft Ads UI:
 cp .env.example .env
 # Edit .env with your actual credentials
 
-# 2. Test locally (requires gcloud auth for BigQuery)
-export $(cat .env | xargs)
-python main.py
+# 2. Copy the service account key
+cp ../dbt/bigquery_service_key.json ./google_ads_sa_key.json
 
-# 3. Deploy to Cloud Run
+# 3. Test locally with dry run
+export $(cat .env | xargs) && DRY_RUN=true python main.py
+
+# 4. Test locally (live)
+export $(cat .env | xargs) && python main.py
+
+# 5. Deploy to Cloud Run
 ./deploy.sh
 ```
 
@@ -121,7 +127,7 @@ LIMIT 20
 Cloud Scheduler (daily 9 AM ET)
   -> Cloud Run Job: conversion-uploader
        -> BigQuery: query unsent events
-       -> Google Ads API: upload conversions (via GCLID)
-       -> Microsoft Ads API: upload conversions (via MSCLKID)
+       -> Google Ads API: upload conversions (via GCLID, service account auth)
+       -> Microsoft Ads API: upload conversions (via MSCLKID, OAuth refresh token)
        -> BigQuery: log results to ad_conversion_log
 ```

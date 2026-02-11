@@ -21,8 +21,8 @@ Cloud Scheduler (daily 9 AM ET)
 - `config.py` — All env vars, validation, action/goal name mappings.
 - `queries.py` — SQL query templates for each event type. All queries use the same click ID resolution pattern via `dim_users` + `dim_attribution`.
 - `bq_client.py` — BigQuery client, table creation, query execution, result logging via `insert_rows_json`.
-- `google_ads_client.py` — Google Ads client. Looks up conversion action resource names by name (cached). Handles partial failures per-event.
-- `microsoft_ads_client.py` — Microsoft Ads client. Same auth pattern as `../bing_ads_importer/main.py`. Uses SOAP factory for OfflineConversion objects.
+- `google_ads_client.py` — Google Ads client. Uses **service account auth** (JSON key file from `../dbt/bigquery_service_key.json`). Looks up conversion action resource names by name (cached). Handles partial failures per-event.
+- `microsoft_ads_client.py` — Microsoft Ads client. Same OAuth credentials as `../bing_ads_importer/main.py`. Uses SOAP factory for OfflineConversion objects.
 - `deploy.sh` — Builds container + deploys Cloud Run Job with env vars from `.env`.
 
 ## Key Design Decisions

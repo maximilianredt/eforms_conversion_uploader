@@ -7,9 +7,8 @@ from google.ads.googleads.errors import GoogleAdsException
 
 from config import (
     GOOGLE_ADS_DEVELOPER_TOKEN,
-    GOOGLE_ADS_CLIENT_ID,
-    GOOGLE_ADS_CLIENT_SECRET,
-    GOOGLE_ADS_REFRESH_TOKEN,
+    GOOGLE_ADS_SA_KEY_PATH,
+    GOOGLE_ADS_SA_EMAIL,
     GOOGLE_ADS_CUSTOMER_ID,
     GOOGLE_ADS_LOGIN_CUSTOMER_ID,
     CURRENCY_CODE,
@@ -21,12 +20,11 @@ BATCH_SIZE = 2000
 
 
 def get_client() -> GoogleAdsClient:
-    """Create a GoogleAdsClient from environment variables."""
+    """Create a GoogleAdsClient using service account authentication."""
     credentials = {
         "developer_token": GOOGLE_ADS_DEVELOPER_TOKEN,
-        "client_id": GOOGLE_ADS_CLIENT_ID,
-        "client_secret": GOOGLE_ADS_CLIENT_SECRET,
-        "refresh_token": GOOGLE_ADS_REFRESH_TOKEN,
+        "json_key_file_path": GOOGLE_ADS_SA_KEY_PATH,
+        "impersonated_email": GOOGLE_ADS_SA_EMAIL,
         "login_customer_id": GOOGLE_ADS_LOGIN_CUSTOMER_ID,
         "use_proto_plus": True,
     }

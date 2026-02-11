@@ -10,8 +10,6 @@ from config import (
     MS_CLIENT_ID,
     MS_CLIENT_SECRET,
     MS_REFRESH_TOKEN,
-    MS_CUSTOMER_ID,
-    MS_ACCOUNT_ID,
     CURRENCY_CODE,
 )
 
@@ -37,8 +35,6 @@ def get_campaign_service() -> ServiceClient:
     authorization_data = AuthorizationData(
         authentication=authentication,
         developer_token=MS_DEV_TOKEN,
-        customer_id=MS_CUSTOMER_ID,
-        account_id=MS_ACCOUNT_ID,
     )
 
     campaign_service = ServiceClient(

@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 .DS_Store
+google_ads_sa_key.json
+*_service_key.json
+*_sa_key.json
