@@ -80,48 +80,51 @@ def process_event_type(
             for e in google_events[:3]:
                 logger.info(f"  event_id={e['event_id']}, gclid={e['gclid']}, value={e.get('conversion_value', 0)}")
         else:
-            from google_ads_client import upload_click_conversions
+            try:
+                from google_ads_client import upload_click_conversions
 
-            gads_conversions = [
-                {
-                    'event_id': e['event_id'],
-                    'gclid': e['gclid'],
-                    'conversion_time': e['conversion_time'],
-                    'value': e.get('conversion_value', 0),
-                    'event_type': e['event_type'],
-                }
-                for e in google_events
-            ]
-            gads_results = upload_click_conversions(gads_client, gads_conversions, gads_action_cache)
+                gads_conversions = [
+                    {
+                        'event_id': e['event_id'],
+                        'gclid': e['gclid'],
+                        'conversion_time': e['conversion_time'],
+                        'value': e.get('conversion_value', 0),
+                        'event_type': e['event_type'],
+                    }
+                    for e in google_events
+                ]
+                gads_results = upload_click_conversions(gads_client, gads_conversions, gads_action_cache)
 
-            # Log results to BigQuery
-            log_rows = []
-            for event, (event_id, success, message) in zip(google_events, gads_results):
-                status = 'sent' if success else 'failed'
-                log_rows.append({
-                    'event_id': event_id,
-                    'event_type': event['event_type'],
-                    'platform': 'google_ads',
-                    'click_id': event['gclid'],
-                    'conversion_time': event['conversion_time'],
-                    'conversion_value': event.get('conversion_value', 0),
-                    'conversion_action': GADS_ACTION_MAP.get(event['event_type']),
-                    'currency_code': CURRENCY_CODE,
-                    'status': status,
-                    'api_response': message if success else None,
-                    'error_message': message if not success else None,
-                    'user_id': event.get('user_id'),
-                })
-                if success:
-                    summary['google_ads']['sent'] += 1
-                else:
-                    summary['google_ads']['failed'] += 1
+                # Log results to BigQuery
+                log_rows = []
+                for event, (event_id, success, message) in zip(google_events, gads_results):
+                    status = 'sent' if success else 'failed'
+                    log_rows.append({
+                        'event_id': event_id,
+                        'event_type': event['event_type'],
+                        'platform': 'google_ads',
+                        'click_id': event['gclid'],
+                        'conversion_time': event['conversion_time'],
+                        'conversion_value': event.get('conversion_value', 0),
+                        'conversion_action': GADS_ACTION_MAP.get(event['event_type']),
+                        'currency_code': CURRENCY_CODE,
+                        'status': status,
+                        'api_response': message if success else None,
+                        'error_message': message if not success else None,
+                        'user_id': event.get('user_id'),
+                    })
+                    if success:
+                        summary['google_ads']['sent'] += 1
+                    else:
+                        summary['google_ads']['failed'] += 1
 
-            log_conversion_results(bq_client, log_rows)
+                log_conversion_results(bq_client, log_rows)
 
-            sent = sum(1 for _, s, _ in gads_results if s)
-            failed = sum(1 for _, s, _ in gads_results if not s)
-            logger.info(f"Google Ads: {sent} sent, {failed} failed")
+                sent = sum(1 for _, s, _ in gads_results if s)
+                failed = sum(1 for _, s, _ in gads_results if not s)
+                logger.info(f"Google Ads: {sent} sent, {failed} failed")
+            except Exception as e:
+                logger.error(f"Google Ads upload failed for {event_type_label}: {e}")
 
     # --- Microsoft Ads ---
     if microsoft_events:
@@ -130,47 +133,50 @@ def process_event_type(
             for e in microsoft_events[:3]:
                 logger.info(f"  event_id={e['event_id']}, msclkid={e['msclkid']}, value={e.get('conversion_value', 0)}")
         else:
-            from microsoft_ads_client import upload_offline_conversions
+            try:
+                from microsoft_ads_client import upload_offline_conversions
 
-            msads_conversions = [
-                {
-                    'event_id': e['event_id'],
-                    'msclkid': e['msclkid'],
-                    'conversion_time': e['conversion_time'],
-                    'value': e.get('conversion_value', 0),
-                    'conversion_goal_name': MSADS_GOAL_MAP.get(e['event_type']),
-                }
-                for e in microsoft_events
-            ]
-            msads_results = upload_offline_conversions(msads_service, msads_conversions)
+                msads_conversions = [
+                    {
+                        'event_id': e['event_id'],
+                        'msclkid': e['msclkid'],
+                        'conversion_time': e['conversion_time'],
+                        'value': e.get('conversion_value', 0),
+                        'conversion_goal_name': MSADS_GOAL_MAP.get(e['event_type']),
+                    }
+                    for e in microsoft_events
+                ]
+                msads_results = upload_offline_conversions(msads_service, msads_conversions)
 
-            log_rows = []
-            for event, (event_id, success, message) in zip(microsoft_events, msads_results):
-                status = 'sent' if success else 'failed'
-                log_rows.append({
-                    'event_id': event_id,
-                    'event_type': event['event_type'],
-                    'platform': 'microsoft_ads',
-                    'click_id': event['msclkid'],
-                    'conversion_time': event['conversion_time'],
-                    'conversion_value': event.get('conversion_value', 0),
-                    'conversion_action': MSADS_GOAL_MAP.get(event['event_type']),
-                    'currency_code': CURRENCY_CODE,
-                    'status': status,
-                    'api_response': message if success else None,
-                    'error_message': message if not success else None,
-                    'user_id': event.get('user_id'),
-                })
-                if success:
-                    summary['microsoft_ads']['sent'] += 1
-                else:
-                    summary['microsoft_ads']['failed'] += 1
+                log_rows = []
+                for event, (event_id, success, message) in zip(microsoft_events, msads_results):
+                    status = 'sent' if success else 'failed'
+                    log_rows.append({
+                        'event_id': event_id,
+                        'event_type': event['event_type'],
+                        'platform': 'microsoft_ads',
+                        'click_id': event['msclkid'],
+                        'conversion_time': event['conversion_time'],
+                        'conversion_value': event.get('conversion_value', 0),
+                        'conversion_action': MSADS_GOAL_MAP.get(event['event_type']),
+                        'currency_code': CURRENCY_CODE,
+                        'status': status,
+                        'api_response': message if success else None,
+                        'error_message': message if not success else None,
+                        'user_id': event.get('user_id'),
+                    })
+                    if success:
+                        summary['microsoft_ads']['sent'] += 1
+                    else:
+                        summary['microsoft_ads']['failed'] += 1
 
-            log_conversion_results(bq_client, log_rows)
+                log_conversion_results(bq_client, log_rows)
 
-            sent = sum(1 for _, s, _ in msads_results if s)
-            failed = sum(1 for _, s, _ in msads_results if not s)
-            logger.info(f"Microsoft Ads: {sent} sent, {failed} failed")
+                sent = sum(1 for _, s, _ in msads_results if s)
+                failed = sum(1 for _, s, _ in msads_results if not s)
+                logger.info(f"Microsoft Ads: {sent} sent, {failed} failed")
+            except Exception as e:
+                logger.error(f"Microsoft Ads upload failed for {event_type_label}: {e}")
 
 
 def process_refunds(
@@ -179,11 +185,12 @@ def process_refunds(
     msads_service,
     gads_action_cache: dict,
     summary: dict,
+    skip_dedup: bool = False,
 ):
     """Process refund events: send retractions to the platform the original was sent to."""
     logger.info("--- Refunds ---")
 
-    query = get_unsent_refunds_query(LOOKBACK_DAYS, MAX_RETRIES)
+    query = get_unsent_refunds_query(LOOKBACK_DAYS, MAX_RETRIES, skip_dedup)
     refunds = run_query(bq_client, query)
 
     if not refunds:
@@ -201,97 +208,103 @@ def process_refunds(
         if DRY_RUN:
             logger.info(f"[DRY RUN] Would send {len(google_refunds)} retractions to Google Ads")
         else:
-            from google_ads_client import upload_conversion_retractions
+            try:
+                from google_ads_client import upload_conversion_retractions
 
-            gads_adjustments = [
-                {
-                    'event_id': r['event_id'],
-                    'original_event_id': r['original_event_id'],
-                    'original_conversion_action': r['original_conversion_action'],
-                    'conversion_time': r['conversion_time'],
-                    'original_conversion_time': r['original_conversion_time'],
-                    'click_id': r['click_id'],
-                }
-                for r in google_refunds
-            ]
-            gads_results = upload_conversion_retractions(gads_client, gads_adjustments, gads_action_cache)
+                gads_adjustments = [
+                    {
+                        'event_id': r['event_id'],
+                        'original_event_id': r['original_event_id'],
+                        'original_conversion_action': r['original_conversion_action'],
+                        'conversion_time': r['conversion_time'],
+                        'original_conversion_time': r['original_conversion_time'],
+                        'click_id': r['click_id'],
+                    }
+                    for r in google_refunds
+                ]
+                gads_results = upload_conversion_retractions(gads_client, gads_adjustments, gads_action_cache)
 
-            log_rows = []
-            for refund, (event_id, success, message) in zip(google_refunds, gads_results):
-                status = 'retracted' if success else 'failed'
-                log_rows.append({
-                    'event_id': event_id,
-                    'event_type': 'refund',
-                    'platform': 'google_ads',
-                    'click_id': refund['click_id'],
-                    'conversion_time': refund['conversion_time'],
-                    'conversion_value': refund.get('conversion_value', 0),
-                    'conversion_action': refund['original_conversion_action'],
-                    'currency_code': CURRENCY_CODE,
-                    'status': status,
-                    'api_response': message if success else None,
-                    'error_message': message if not success else None,
-                    'original_event_id': refund['original_event_id'],
-                    'user_id': refund.get('user_id'),
-                })
-                if success:
-                    summary['google_ads']['retracted'] += 1
-                else:
-                    summary['google_ads']['failed'] += 1
+                log_rows = []
+                for refund, (event_id, success, message) in zip(google_refunds, gads_results):
+                    status = 'retracted' if success else 'failed'
+                    log_rows.append({
+                        'event_id': event_id,
+                        'event_type': 'refund',
+                        'platform': 'google_ads',
+                        'click_id': refund['click_id'],
+                        'conversion_time': refund['conversion_time'],
+                        'conversion_value': refund.get('conversion_value', 0),
+                        'conversion_action': refund['original_conversion_action'],
+                        'currency_code': CURRENCY_CODE,
+                        'status': status,
+                        'api_response': message if success else None,
+                        'error_message': message if not success else None,
+                        'original_event_id': refund['original_event_id'],
+                        'user_id': refund.get('user_id'),
+                    })
+                    if success:
+                        summary['google_ads']['retracted'] += 1
+                    else:
+                        summary['google_ads']['failed'] += 1
 
-            log_conversion_results(bq_client, log_rows)
+                log_conversion_results(bq_client, log_rows)
 
-            sent = sum(1 for _, s, _ in gads_results if s)
-            failed = sum(1 for _, s, _ in gads_results if not s)
-            logger.info(f"Google Ads retractions: {sent} sent, {failed} failed")
+                sent = sum(1 for _, s, _ in gads_results if s)
+                failed = sum(1 for _, s, _ in gads_results if not s)
+                logger.info(f"Google Ads retractions: {sent} sent, {failed} failed")
+            except Exception as e:
+                logger.error(f"Google Ads retractions failed: {e}")
 
     # --- Microsoft Ads Retractions ---
     if microsoft_refunds:
         if DRY_RUN:
             logger.info(f"[DRY RUN] Would send {len(microsoft_refunds)} retractions to Microsoft Ads")
         else:
-            from microsoft_ads_client import upload_conversion_retractions
+            try:
+                from microsoft_ads_client import upload_conversion_retractions
 
-            msads_adjustments = [
-                {
-                    'event_id': r['event_id'],
-                    'click_id': r['click_id'],
-                    'original_conversion_action': r['original_conversion_action'],
-                    'original_conversion_time': r['original_conversion_time'],
-                    'conversion_time': r['conversion_time'],
-                }
-                for r in microsoft_refunds
-            ]
-            msads_results = upload_conversion_retractions(msads_service, msads_adjustments)
+                msads_adjustments = [
+                    {
+                        'event_id': r['event_id'],
+                        'click_id': r['click_id'],
+                        'original_conversion_action': r['original_conversion_action'],
+                        'original_conversion_time': r['original_conversion_time'],
+                        'conversion_time': r['conversion_time'],
+                    }
+                    for r in microsoft_refunds
+                ]
+                msads_results = upload_conversion_retractions(msads_service, msads_adjustments)
 
-            log_rows = []
-            for refund, (event_id, success, message) in zip(microsoft_refunds, msads_results):
-                status = 'retracted' if success else 'failed'
-                log_rows.append({
-                    'event_id': event_id,
-                    'event_type': 'refund',
-                    'platform': 'microsoft_ads',
-                    'click_id': refund['click_id'],
-                    'conversion_time': refund['conversion_time'],
-                    'conversion_value': refund.get('conversion_value', 0),
-                    'conversion_action': refund['original_conversion_action'],
-                    'currency_code': CURRENCY_CODE,
-                    'status': status,
-                    'api_response': message if success else None,
-                    'error_message': message if not success else None,
-                    'original_event_id': refund['original_event_id'],
-                    'user_id': refund.get('user_id'),
-                })
-                if success:
-                    summary['microsoft_ads']['retracted'] += 1
-                else:
-                    summary['microsoft_ads']['failed'] += 1
+                log_rows = []
+                for refund, (event_id, success, message) in zip(microsoft_refunds, msads_results):
+                    status = 'retracted' if success else 'failed'
+                    log_rows.append({
+                        'event_id': event_id,
+                        'event_type': 'refund',
+                        'platform': 'microsoft_ads',
+                        'click_id': refund['click_id'],
+                        'conversion_time': refund['conversion_time'],
+                        'conversion_value': refund.get('conversion_value', 0),
+                        'conversion_action': refund['original_conversion_action'],
+                        'currency_code': CURRENCY_CODE,
+                        'status': status,
+                        'api_response': message if success else None,
+                        'error_message': message if not success else None,
+                        'original_event_id': refund['original_event_id'],
+                        'user_id': refund.get('user_id'),
+                    })
+                    if success:
+                        summary['microsoft_ads']['retracted'] += 1
+                    else:
+                        summary['microsoft_ads']['failed'] += 1
 
-            log_conversion_results(bq_client, log_rows)
+                log_conversion_results(bq_client, log_rows)
 
-            sent = sum(1 for _, s, _ in msads_results if s)
-            failed = sum(1 for _, s, _ in msads_results if not s)
-            logger.info(f"Microsoft Ads retractions: {sent} sent, {failed} failed")
+                sent = sum(1 for _, s, _ in msads_results if s)
+                failed = sum(1 for _, s, _ in msads_results if not s)
+                logger.info(f"Microsoft Ads retractions: {sent} sent, {failed} failed")
+            except Exception as e:
+                logger.error(f"Microsoft Ads retractions failed: {e}")
 
 
 def main():
@@ -307,7 +320,12 @@ def main():
         bq = get_client()
 
         # 3. Ensure tracking table exists
-        ensure_log_table(bq)
+        log_table_ready = ensure_log_table(bq, dry_run=DRY_RUN)
+        # When log table doesn't exist, skip dedup (all events treated as unsent)
+        skip_dedup = not log_table_ready
+
+        if skip_dedup:
+            logger.warning("Log table not available — skipping dedup (all events treated as unsent)")
 
         # 4. Initialize ad platform clients (lazy - only if needed)
         gads_client = None
@@ -331,10 +349,10 @@ def main():
 
         # 6. Process each event type
         event_queries = [
-            ("Trial Starts", get_unsent_trial_starts_query(LOOKBACK_DAYS, MAX_RETRIES)),
-            ("Subscriptions", get_unsent_subscriptions_query(LOOKBACK_DAYS, MAX_RETRIES, SEND_RENEWAL_PAYMENTS)),
-            ("Document Purchases", get_unsent_document_purchases_query(LOOKBACK_DAYS, MAX_RETRIES)),
-            ("Chat Purchases", get_unsent_chat_purchases_query(LOOKBACK_DAYS, MAX_RETRIES)),
+            ("Trial Starts", get_unsent_trial_starts_query(LOOKBACK_DAYS, MAX_RETRIES, skip_dedup)),
+            ("Subscriptions", get_unsent_subscriptions_query(LOOKBACK_DAYS, MAX_RETRIES, SEND_RENEWAL_PAYMENTS, skip_dedup)),
+            ("Document Purchases", get_unsent_document_purchases_query(LOOKBACK_DAYS, MAX_RETRIES, skip_dedup)),
+            ("Chat Purchases", get_unsent_chat_purchases_query(LOOKBACK_DAYS, MAX_RETRIES, skip_dedup)),
         ]
 
         for label, query in event_queries:
@@ -349,7 +367,7 @@ def main():
 
         # 7. Process refunds
         try:
-            process_refunds(bq, gads_client, msads_service, gads_action_cache, summary)
+            process_refunds(bq, gads_client, msads_service, gads_action_cache, summary, skip_dedup)
         except Exception as e:
             logger.error(f"Error processing refunds: {e}")
 

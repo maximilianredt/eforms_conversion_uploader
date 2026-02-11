@@ -34,6 +34,7 @@ MS_CLIENT_ID = os.environ.get('MS_CLIENT_ID')
 MS_CLIENT_SECRET = os.environ.get('MS_CLIENT_SECRET')
 MS_REFRESH_TOKEN = os.environ.get('MS_REFRESH_TOKEN')
 MS_ACCOUNT_ID = os.environ.get('MS_ACCOUNT_ID', '180267661')
+MS_CUSTOMER_ID = os.environ.get('MS_CUSTOMER_ID', '251167100')
 
 # Microsoft Ads conversion goal names
 MSADS_TRIAL_START_GOAL = os.environ.get('MSADS_TRIAL_START_GOAL', 'Trial Start DWH')

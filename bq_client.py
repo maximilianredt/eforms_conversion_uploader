@@ -5,20 +5,36 @@ from datetime import datetime, timezone
 
 from google.cloud import bigquery
 from google.cloud.exceptions import NotFound
+from google.oauth2 import service_account
 
-from config import BQ_PROJECT, BQ_DATASET, BQ_LOG_TABLE
+from config import BQ_PROJECT, BQ_DATASET, BQ_LOG_TABLE, GOOGLE_ADS_SA_KEY_PATH
 from queries import get_create_log_table_query
 
 logger = logging.getLogger(__name__)
 
 
 def get_client() -> bigquery.Client:
-    """Create and return a BigQuery client using Application Default Credentials."""
-    return bigquery.Client(project=BQ_PROJECT)
+    """Create and return a BigQuery client.
+
+    Uses the same service account key file as Google Ads for authentication.
+    Falls back to Application Default Credentials if the key file is not found.
+    """
+    try:
+        credentials = service_account.Credentials.from_service_account_file(
+            GOOGLE_ADS_SA_KEY_PATH,
+            scopes=["https://www.googleapis.com/auth/bigquery"],
+        )
+        return bigquery.Client(project=BQ_PROJECT, credentials=credentials)
+    except Exception:
+        logger.info("Service account key not found for BQ, falling back to ADC")
+        return bigquery.Client(project=BQ_PROJECT)
 
 
-def ensure_log_table(client: bigquery.Client):
-    """Create the ad_conversion_log table and dataset if they don't exist."""
+def ensure_log_table(client: bigquery.Client, dry_run: bool = False) -> bool:
+    """Create the ad_conversion_log table and dataset if they don't exist.
+
+    Returns True if the log table is available, False if not (dry run only).
+    """
     # Ensure dataset exists
     dataset_ref = client.dataset(BQ_DATASET)
     try:
@@ -26,16 +42,35 @@ def ensure_log_table(client: bigquery.Client):
         logger.info(f"Dataset {BQ_DATASET} found")
     except NotFound:
         logger.info(f"Dataset {BQ_DATASET} not found, creating...")
-        dataset = bigquery.Dataset(dataset_ref)
-        dataset.location = "US"
-        client.create_dataset(dataset)
-        logger.info(f"Dataset {BQ_DATASET} created")
+        try:
+            dataset = bigquery.Dataset(dataset_ref)
+            dataset.location = "US"
+            client.create_dataset(dataset)
+            logger.info(f"Dataset {BQ_DATASET} created")
+        except Exception as e:
+            if dry_run:
+                logger.warning(
+                    f"Cannot create dataset {BQ_DATASET} (permission denied). "
+                    f"Create it manually in the BigQuery console. Continuing dry run..."
+                )
+                return False
+            raise
 
     # Create table if not exists
-    query = get_create_log_table_query()
-    job = client.query(query)
-    job.result()
-    logger.info(f"Table {BQ_DATASET}.{BQ_LOG_TABLE} ready")
+    try:
+        query = get_create_log_table_query()
+        job = client.query(query)
+        job.result()
+        logger.info(f"Table {BQ_DATASET}.{BQ_LOG_TABLE} ready")
+        return True
+    except Exception as e:
+        if dry_run:
+            logger.warning(
+                f"Cannot create log table (permission denied). "
+                f"This will be created automatically on Cloud Run. Continuing dry run..."
+            )
+            return False
+        raise
 
 
 def run_query(client: bigquery.Client, query: str) -> list[dict]:

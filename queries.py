@@ -10,15 +10,68 @@ DIM_USERS_TABLE = f"`{BQ_PROJECT}.{DBT_MARTS_DATASET}.dim_users`"
 DIM_ATTRIBUTION_TABLE = f"`{BQ_PROJECT}.{DBT_MARTS_DATASET}.dim_attribution`"
 
 
-def get_unsent_trial_starts_query(lookback_days: int, max_retries: int) -> str:
-    """Query for trial start events not yet sent to ad platforms."""
+def _dedup_cte(event_type_filter: str, skip_dedup: bool) -> str:
+    """Generate the failed_counts CTE, or empty string if skipping dedup."""
+    if skip_dedup:
+        return ""
     return f"""
     WITH failed_counts AS (
         SELECT event_id, platform, COUNT(*) AS fail_count
         FROM {LOG_TABLE}
-        WHERE event_type = 'trial_start' AND status = 'failed'
+        WHERE event_type {event_type_filter} AND status = 'failed'
         GROUP BY event_id, platform
-    )
+    )"""
+
+
+def _dedup_joins(id_col: str, max_retries: int, skip_dedup: bool) -> str:
+    """Generate the LEFT JOINs for dedup against the log table."""
+    if skip_dedup:
+        return ""
+    return f"""
+    -- Exclude already sent to Google Ads
+    LEFT JOIN {LOG_TABLE} log_g
+        ON {id_col} = log_g.event_id
+        AND log_g.platform = 'google_ads'
+        AND log_g.status = 'sent'
+    -- Exclude already sent to Microsoft Ads
+    LEFT JOIN {LOG_TABLE} log_m
+        ON {id_col} = log_m.event_id
+        AND log_m.platform = 'microsoft_ads'
+        AND log_m.status = 'sent'
+    -- Exclude over-retried for Google Ads
+    LEFT JOIN failed_counts fc_g
+        ON {id_col} = fc_g.event_id
+        AND fc_g.platform = 'google_ads'
+        AND fc_g.fail_count >= {max_retries}
+    -- Exclude over-retried for Microsoft Ads
+    LEFT JOIN failed_counts fc_m
+        ON {id_col} = fc_m.event_id
+        AND fc_m.platform = 'microsoft_ads'
+        AND fc_m.fail_count >= {max_retries}"""
+
+
+def _dedup_where(skip_dedup: bool) -> str:
+    """Generate the WHERE clause for dedup filtering."""
+    if skip_dedup:
+        return ""
+    return """
+        AND (
+            (COALESCE(du.conversion_gclid, da.first_touch_gclid) IS NOT NULL
+             AND log_g.event_id IS NULL AND fc_g.event_id IS NULL)
+            OR
+            (COALESCE(du.conversion_msclkid, da.first_touch_msclkid) IS NOT NULL
+             AND log_m.event_id IS NULL AND fc_m.event_id IS NULL)
+        )"""
+
+
+def get_unsent_trial_starts_query(lookback_days: int, max_retries: int, skip_dedup: bool = False) -> str:
+    """Query for trial start events not yet sent to ad platforms."""
+    cte = _dedup_cte("= 'trial_start'", skip_dedup)
+    joins = _dedup_joins("ts.event_id", max_retries, skip_dedup)
+    where = _dedup_where(skip_dedup)
+
+    return f"""
+    {cte}
     SELECT
         ts.event_id,
         'trial_start' AS event_type,
@@ -30,58 +83,30 @@ def get_unsent_trial_starts_query(lookback_days: int, max_retries: int) -> str:
     FROM {TRIAL_TABLE} ts
     LEFT JOIN {DIM_USERS_TABLE} du ON ts.user_id = du.user_id
     LEFT JOIN {DIM_ATTRIBUTION_TABLE} da ON ts.user_id = da.user_id
-    -- Exclude already sent to Google Ads
-    LEFT JOIN {LOG_TABLE} log_g
-        ON ts.event_id = log_g.event_id
-        AND log_g.platform = 'google_ads'
-        AND log_g.status = 'sent'
-    -- Exclude already sent to Microsoft Ads
-    LEFT JOIN {LOG_TABLE} log_m
-        ON ts.event_id = log_m.event_id
-        AND log_m.platform = 'microsoft_ads'
-        AND log_m.status = 'sent'
-    -- Exclude over-retried for Google Ads
-    LEFT JOIN failed_counts fc_g
-        ON ts.event_id = fc_g.event_id
-        AND fc_g.platform = 'google_ads'
-        AND fc_g.fail_count >= {max_retries}
-    -- Exclude over-retried for Microsoft Ads
-    LEFT JOIN failed_counts fc_m
-        ON ts.event_id = fc_m.event_id
-        AND fc_m.platform = 'microsoft_ads'
-        AND fc_m.fail_count >= {max_retries}
+    {joins}
     WHERE
         ts.trial_started_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {lookback_days} DAY)
         AND (
             COALESCE(du.conversion_gclid, da.first_touch_gclid) IS NOT NULL
             OR COALESCE(du.conversion_msclkid, da.first_touch_msclkid) IS NOT NULL
         )
-        -- At least one platform has not been sent to yet (and not over-retried)
-        AND (
-            (COALESCE(du.conversion_gclid, da.first_touch_gclid) IS NOT NULL
-             AND log_g.event_id IS NULL AND fc_g.event_id IS NULL)
-            OR
-            (COALESCE(du.conversion_msclkid, da.first_touch_msclkid) IS NOT NULL
-             AND log_m.event_id IS NULL AND fc_m.event_id IS NULL)
-        )
+        {where}
     """
 
 
-def get_unsent_subscriptions_query(lookback_days: int, max_retries: int, include_renewals: bool) -> str:
+def get_unsent_subscriptions_query(lookback_days: int, max_retries: int, include_renewals: bool, skip_dedup: bool = False) -> str:
     """Query for subscription payment events not yet sent to ad platforms."""
     payment_type_filter = (
         "p.payment_type IN ('initial_subscription', 'renewal')"
         if include_renewals
         else "p.payment_type = 'initial_subscription'"
     )
+    cte = _dedup_cte("IN ('monthly_subscription', 'yearly_subscription')", skip_dedup)
+    joins = _dedup_joins("p.payment_id", max_retries, skip_dedup)
+    where = _dedup_where(skip_dedup)
 
     return f"""
-    WITH failed_counts AS (
-        SELECT event_id, platform, COUNT(*) AS fail_count
-        FROM {LOG_TABLE}
-        WHERE event_type IN ('monthly_subscription', 'yearly_subscription') AND status = 'failed'
-        GROUP BY event_id, platform
-    )
+    {cte}
     SELECT
         p.payment_id AS event_id,
         CASE
@@ -96,22 +121,7 @@ def get_unsent_subscriptions_query(lookback_days: int, max_retries: int, include
     FROM {PAYMENTS_TABLE} p
     LEFT JOIN {DIM_USERS_TABLE} du ON p.user_id = du.user_id
     LEFT JOIN {DIM_ATTRIBUTION_TABLE} da ON p.user_id = da.user_id
-    LEFT JOIN {LOG_TABLE} log_g
-        ON p.payment_id = log_g.event_id
-        AND log_g.platform = 'google_ads'
-        AND log_g.status = 'sent'
-    LEFT JOIN {LOG_TABLE} log_m
-        ON p.payment_id = log_m.event_id
-        AND log_m.platform = 'microsoft_ads'
-        AND log_m.status = 'sent'
-    LEFT JOIN failed_counts fc_g
-        ON p.payment_id = fc_g.event_id
-        AND fc_g.platform = 'google_ads'
-        AND fc_g.fail_count >= {max_retries}
-    LEFT JOIN failed_counts fc_m
-        ON p.payment_id = fc_m.event_id
-        AND fc_m.platform = 'microsoft_ads'
-        AND fc_m.fail_count >= {max_retries}
+    {joins}
     WHERE
         p.payment_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {lookback_days} DAY)
         AND {payment_type_filter}
@@ -122,25 +132,18 @@ def get_unsent_subscriptions_query(lookback_days: int, max_retries: int, include
             COALESCE(du.conversion_gclid, da.first_touch_gclid) IS NOT NULL
             OR COALESCE(du.conversion_msclkid, da.first_touch_msclkid) IS NOT NULL
         )
-        AND (
-            (COALESCE(du.conversion_gclid, da.first_touch_gclid) IS NOT NULL
-             AND log_g.event_id IS NULL AND fc_g.event_id IS NULL)
-            OR
-            (COALESCE(du.conversion_msclkid, da.first_touch_msclkid) IS NOT NULL
-             AND log_m.event_id IS NULL AND fc_m.event_id IS NULL)
-        )
+        {where}
     """
 
 
-def get_unsent_document_purchases_query(lookback_days: int, max_retries: int) -> str:
+def get_unsent_document_purchases_query(lookback_days: int, max_retries: int, skip_dedup: bool = False) -> str:
     """Query for document purchase events not yet sent to ad platforms."""
+    cte = _dedup_cte("= 'document_purchase'", skip_dedup)
+    joins = _dedup_joins("p.payment_id", max_retries, skip_dedup)
+    where = _dedup_where(skip_dedup)
+
     return f"""
-    WITH failed_counts AS (
-        SELECT event_id, platform, COUNT(*) AS fail_count
-        FROM {LOG_TABLE}
-        WHERE event_type = 'document_purchase' AND status = 'failed'
-        GROUP BY event_id, platform
-    )
+    {cte}
     SELECT
         p.payment_id AS event_id,
         'document_purchase' AS event_type,
@@ -152,22 +155,7 @@ def get_unsent_document_purchases_query(lookback_days: int, max_retries: int) ->
     FROM {PAYMENTS_TABLE} p
     LEFT JOIN {DIM_USERS_TABLE} du ON p.user_id = du.user_id
     LEFT JOIN {DIM_ATTRIBUTION_TABLE} da ON p.user_id = da.user_id
-    LEFT JOIN {LOG_TABLE} log_g
-        ON p.payment_id = log_g.event_id
-        AND log_g.platform = 'google_ads'
-        AND log_g.status = 'sent'
-    LEFT JOIN {LOG_TABLE} log_m
-        ON p.payment_id = log_m.event_id
-        AND log_m.platform = 'microsoft_ads'
-        AND log_m.status = 'sent'
-    LEFT JOIN failed_counts fc_g
-        ON p.payment_id = fc_g.event_id
-        AND fc_g.platform = 'google_ads'
-        AND fc_g.fail_count >= {max_retries}
-    LEFT JOIN failed_counts fc_m
-        ON p.payment_id = fc_m.event_id
-        AND fc_m.platform = 'microsoft_ads'
-        AND fc_m.fail_count >= {max_retries}
+    {joins}
     WHERE
         p.payment_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {lookback_days} DAY)
         AND p.payment_type = 'order'
@@ -179,25 +167,18 @@ def get_unsent_document_purchases_query(lookback_days: int, max_retries: int) ->
             COALESCE(du.conversion_gclid, da.first_touch_gclid) IS NOT NULL
             OR COALESCE(du.conversion_msclkid, da.first_touch_msclkid) IS NOT NULL
         )
-        AND (
-            (COALESCE(du.conversion_gclid, da.first_touch_gclid) IS NOT NULL
-             AND log_g.event_id IS NULL AND fc_g.event_id IS NULL)
-            OR
-            (COALESCE(du.conversion_msclkid, da.first_touch_msclkid) IS NOT NULL
-             AND log_m.event_id IS NULL AND fc_m.event_id IS NULL)
-        )
+        {where}
     """
 
 
-def get_unsent_chat_purchases_query(lookback_days: int, max_retries: int) -> str:
+def get_unsent_chat_purchases_query(lookback_days: int, max_retries: int, skip_dedup: bool = False) -> str:
     """Query for chat purchase events not yet sent to ad platforms."""
+    cte = _dedup_cte("= 'chat_purchase'", skip_dedup)
+    joins = _dedup_joins("p.payment_id", max_retries, skip_dedup)
+    where = _dedup_where(skip_dedup)
+
     return f"""
-    WITH failed_counts AS (
-        SELECT event_id, platform, COUNT(*) AS fail_count
-        FROM {LOG_TABLE}
-        WHERE event_type = 'chat_purchase' AND status = 'failed'
-        GROUP BY event_id, platform
-    )
+    {cte}
     SELECT
         p.payment_id AS event_id,
         'chat_purchase' AS event_type,
@@ -209,22 +190,7 @@ def get_unsent_chat_purchases_query(lookback_days: int, max_retries: int) -> str
     FROM {PAYMENTS_TABLE} p
     LEFT JOIN {DIM_USERS_TABLE} du ON p.user_id = du.user_id
     LEFT JOIN {DIM_ATTRIBUTION_TABLE} da ON p.user_id = da.user_id
-    LEFT JOIN {LOG_TABLE} log_g
-        ON p.payment_id = log_g.event_id
-        AND log_g.platform = 'google_ads'
-        AND log_g.status = 'sent'
-    LEFT JOIN {LOG_TABLE} log_m
-        ON p.payment_id = log_m.event_id
-        AND log_m.platform = 'microsoft_ads'
-        AND log_m.status = 'sent'
-    LEFT JOIN failed_counts fc_g
-        ON p.payment_id = fc_g.event_id
-        AND fc_g.platform = 'google_ads'
-        AND fc_g.fail_count >= {max_retries}
-    LEFT JOIN failed_counts fc_m
-        ON p.payment_id = fc_m.event_id
-        AND fc_m.platform = 'microsoft_ads'
-        AND fc_m.fail_count >= {max_retries}
+    {joins}
     WHERE
         p.payment_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {lookback_days} DAY)
         AND p.payment_type = 'order'
@@ -236,18 +202,21 @@ def get_unsent_chat_purchases_query(lookback_days: int, max_retries: int) -> str
             COALESCE(du.conversion_gclid, da.first_touch_gclid) IS NOT NULL
             OR COALESCE(du.conversion_msclkid, da.first_touch_msclkid) IS NOT NULL
         )
-        AND (
-            (COALESCE(du.conversion_gclid, da.first_touch_gclid) IS NOT NULL
-             AND log_g.event_id IS NULL AND fc_g.event_id IS NULL)
-            OR
-            (COALESCE(du.conversion_msclkid, da.first_touch_msclkid) IS NOT NULL
-             AND log_m.event_id IS NULL AND fc_m.event_id IS NULL)
-        )
+        {where}
     """
 
 
-def get_unsent_refunds_query(lookback_days: int, max_retries: int) -> str:
-    """Query for refund events matched to their original sent conversions."""
+def get_unsent_refunds_query(lookback_days: int, max_retries: int, skip_dedup: bool = False) -> str:
+    """Query for refund events matched to their original sent conversions.
+
+    Note: When skip_dedup=True (log table doesn't exist), refunds cannot be
+    processed because they require matching against previously-sent conversions
+    in the log table. Returns an empty result in this case.
+    """
+    if skip_dedup:
+        # Refunds require the log table to match originals - return empty
+        return "SELECT * FROM UNNEST([]) WHERE FALSE"
+
     return f"""
     WITH failed_counts AS (
         SELECT event_id, platform, COUNT(*) AS fail_count

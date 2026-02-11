@@ -10,6 +10,8 @@ from config import (
     MS_CLIENT_ID,
     MS_CLIENT_SECRET,
     MS_REFRESH_TOKEN,
+    MS_ACCOUNT_ID,
+    MS_CUSTOMER_ID,
     CURRENCY_CODE,
 )
 
@@ -33,6 +35,8 @@ def get_campaign_service() -> ServiceClient:
     authentication.request_oauth_tokens_by_refresh_token(MS_REFRESH_TOKEN)
 
     authorization_data = AuthorizationData(
+        account_id=MS_ACCOUNT_ID,
+        customer_id=MS_CUSTOMER_ID,
         authentication=authentication,
         developer_token=MS_DEV_TOKEN,
     )
@@ -80,7 +84,7 @@ def upload_offline_conversions(
     results = []
 
     for batch in _chunks(conversions, BATCH_SIZE):
-        offline_conversions = []
+        offline_conversions = campaign_service.factory.create('ArrayOfOfflineConversion')
         for conv in batch:
             oc = campaign_service.factory.create('OfflineConversion')
             oc.MicrosoftClickId = conv['msclkid']
@@ -88,7 +92,7 @@ def upload_offline_conversions(
             oc.ConversionTime = _format_datetime(conv['conversion_time'])
             oc.ConversionValue = float(conv['value'])
             oc.ConversionCurrencyCode = CURRENCY_CODE
-            offline_conversions.append(oc)
+            offline_conversions.OfflineConversion.append(oc)
 
         try:
             response = campaign_service.ApplyOfflineConversions(
@@ -146,7 +150,7 @@ def upload_conversion_retractions(
     results = []
 
     for batch in _chunks(adjustments, BATCH_SIZE):
-        adjustment_objects = []
+        adjustment_objects = campaign_service.factory.create('ArrayOfOfflineConversionAdjustment')
         for adj in batch:
             oca = campaign_service.factory.create('OfflineConversionAdjustment')
             oca.MicrosoftClickId = adj['click_id']
@@ -156,7 +160,7 @@ def upload_conversion_retractions(
             oca.AdjustmentTime = _format_datetime(adj['conversion_time'])
             oca.AdjustmentValue = 0
             oca.AdjustmentCurrencyCode = CURRENCY_CODE
-            adjustment_objects.append(oca)
+            adjustment_objects.OfflineConversionAdjustment.append(oca)
 
         try:
             response = campaign_service.ApplyOfflineConversionAdjustments(
