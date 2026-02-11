@@ -1,0 +1,11 @@
+# Cloud Build ignore file
+# Inherits from .gitignore but overrides key file exclusion
+
+.env
+__pycache__/
+*.pyc
+.DS_Store
+venv/
+
+# NOTE: google_ads_sa_key.json is intentionally NOT ignored here
+# It needs to be included in the container for Google Ads service account auth

@@ -2,12 +2,12 @@
 
 ## What This Project Does
 
-Cloud Run Job that syncs offline conversion data from BigQuery to Google Ads and Microsoft Ads APIs. Runs daily via Cloud Scheduler. Tracks trial starts, subscriptions, purchases, and refunds — attributing them back to ad clicks via GCLID/MSCLKID.
+Cloud Run Job that syncs offline conversion data from BigQuery to Google Ads and Microsoft Ads APIs. Runs daily at 8:30 AM CET via Cloud Scheduler. Tracks trial starts, subscriptions, purchases, and refunds — attributing them back to ad clicks via GCLID/MSCLKID.
 
 ## Architecture
 
 ```
-Cloud Scheduler (daily 9 AM ET)
+Cloud Scheduler (daily 8:30 AM CET)
   → Cloud Run Job (python:3.9-slim, 512MB, 15min timeout)
     → BigQuery: query unsent events from dbt models
     → Google Ads API: upload via GCLID (ConversionUploadService)
@@ -71,6 +71,13 @@ Key env vars (see `.env.example` for full list):
 - `DRY_RUN` (default `false`) — queries run but no API calls made
 - `LOOKBACK_DAYS` (default `30`) — how far back to scan for unsent events
 - `MAX_RETRIES` (default `3`) — failed events retried up to this many times
+
+## Environment
+
+- **gcloud CLI**: `/Users/mredt/Downloads/google-cloud-sdk/bin/gcloud` (not in PATH by default — add with `export PATH="/Users/mredt/Downloads/google-cloud-sdk/bin:$PATH"`)
+- **GCP Project**: `datawarehouse-412318` (project number: `405662004024`)
+- **Compute SA**: `405662004024-compute@developer.gserviceaccount.com` (used by Cloud Scheduler)
+- **Cloud Run region**: `us-central1`
 
 ## Related Projects
 

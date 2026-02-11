@@ -117,11 +117,21 @@ def log_conversion_results(client: bigquery.Client, rows: list[dict]):
             'created_at': now,
         })
 
-    errors = client.insert_rows_json(table_ref, insert_rows)
-    if errors:
-        logger.error(f"Failed to insert {len(errors)} rows into {BQ_LOG_TABLE}: {errors[:3]}")
-    else:
+    # BigQuery insert_rows_json has a ~10MB request size limit.
+    # Chunk into batches of 5000 rows to avoid 413 errors.
+    BQ_INSERT_BATCH = 5000
+    total_errors = 0
+    for i in range(0, len(insert_rows), BQ_INSERT_BATCH):
+        batch = insert_rows[i:i + BQ_INSERT_BATCH]
+        errors = client.insert_rows_json(table_ref, batch)
+        if errors:
+            total_errors += len(errors)
+            logger.error(f"Failed to insert {len(errors)} rows into {BQ_LOG_TABLE}: {errors[:3]}")
+
+    if total_errors == 0:
         logger.info(f"Logged {len(insert_rows)} results to {BQ_LOG_TABLE}")
+    else:
+        logger.error(f"Logged {len(insert_rows) - total_errors}/{len(insert_rows)} results to {BQ_LOG_TABLE} ({total_errors} errors)")
 
 
 def _truncate(value: str | None, max_len: int) -> str | None:

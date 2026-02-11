@@ -124,7 +124,7 @@ LIMIT 20
 ## Architecture
 
 ```
-Cloud Scheduler (daily 9 AM ET)
+Cloud Scheduler (daily 8:30 AM CET)
   -> Cloud Run Job: conversion-uploader
        -> BigQuery: query unsent events
        -> Google Ads API: upload conversions (via GCLID, service account auth)
