@@ -163,6 +163,12 @@ def upload_click_conversions(
             click_conversion.currency_code = CURRENCY_CODE
             click_conversion.order_id = conv['event_id']
 
+            # Consent: required for Google to process uploaded conversions
+            consent = client.get_type("Consent")
+            consent.ad_user_data = client.enums.ConsentStatusEnum.GRANTED
+            consent.ad_personalization = client.enums.ConsentStatusEnum.GRANTED
+            click_conversion.consent = consent
+
             # Enhanced conversions: attach user identifiers if PII available
             for uid in _build_user_identifiers(client, conv):
                 click_conversion.user_identifiers.append(uid)
