@@ -27,21 +27,17 @@ GADS_YEARLY_SUB_ACTION = os.environ.get('GADS_YEARLY_SUB_ACTION', 'Yearly Subscr
 GADS_DOC_PURCHASE_ACTION = os.environ.get('GADS_DOC_PURCHASE_ACTION', 'Document Purchase DWH')
 GADS_CHAT_PURCHASE_ACTION = os.environ.get('GADS_CHAT_PURCHASE_ACTION', 'Chat Purchase DWH')
 
-# --- Microsoft Ads ---
-# Same credentials as ../bing_ads_importer/
-MS_DEV_TOKEN = os.environ.get('MS_DEV_TOKEN')
-MS_CLIENT_ID = os.environ.get('MS_CLIENT_ID')
-MS_CLIENT_SECRET = os.environ.get('MS_CLIENT_SECRET')
-MS_REFRESH_TOKEN = os.environ.get('MS_REFRESH_TOKEN')
-MS_ACCOUNT_ID = os.environ.get('MS_ACCOUNT_ID', '180267661')
-MS_CUSTOMER_ID = os.environ.get('MS_CUSTOMER_ID', '251167100')
+# --- Microsoft Ads (CAPI) ---
+# Conversions API: https://learn.microsoft.com/en-us/advertising/guides/uet-conversion-api-integration
+MS_CAPI_TAG_ID = os.environ.get('MS_CAPI_TAG_ID', '355054447')
+MS_CAPI_TOKEN = os.environ.get('MS_CAPI_TOKEN')
 
-# Microsoft Ads conversion goal names
-MSADS_TRIAL_START_GOAL = os.environ.get('MSADS_TRIAL_START_GOAL', 'Trial Start DWH')
-MSADS_MONTHLY_SUB_GOAL = os.environ.get('MSADS_MONTHLY_SUB_GOAL', 'Monthly Subscription DWH')
-MSADS_YEARLY_SUB_GOAL = os.environ.get('MSADS_YEARLY_SUB_GOAL', 'Yearly Subscription DWH')
-MSADS_DOC_PURCHASE_GOAL = os.environ.get('MSADS_DOC_PURCHASE_GOAL', 'Document Purchase DWH')
-MSADS_CHAT_PURCHASE_GOAL = os.environ.get('MSADS_CHAT_PURCHASE_GOAL', 'Chat Purchase DWH')
+# Microsoft Ads conversion goal names (must match UET Event Goal "Action" expressions)
+MSADS_TRIAL_START_GOAL = os.environ.get('MSADS_TRIAL_START_GOAL', 'UET Trial Start')
+MSADS_MONTHLY_SUB_GOAL = os.environ.get('MSADS_MONTHLY_SUB_GOAL', 'UET Monthly Subscription')
+MSADS_YEARLY_SUB_GOAL = os.environ.get('MSADS_YEARLY_SUB_GOAL', 'UET Yearly Subscription')
+MSADS_DOC_PURCHASE_GOAL = os.environ.get('MSADS_DOC_PURCHASE_GOAL', 'UET Document Purchase')
+MSADS_CHAT_PURCHASE_GOAL = os.environ.get('MSADS_CHAT_PURCHASE_GOAL', 'UET Chat Purchase')
 
 # --- Options ---
 SEND_RENEWAL_PAYMENTS = os.environ.get('SEND_RENEWAL_PAYMENTS', 'false').lower() == 'true'
@@ -79,11 +75,8 @@ def validate_env_vars():
         'GOOGLE_ADS_SA_EMAIL': GOOGLE_ADS_SA_EMAIL,
         'GOOGLE_ADS_CUSTOMER_ID': GOOGLE_ADS_CUSTOMER_ID,
         'GOOGLE_ADS_LOGIN_CUSTOMER_ID': GOOGLE_ADS_LOGIN_CUSTOMER_ID,
-        'MS_DEV_TOKEN': MS_DEV_TOKEN,
-        'MS_CLIENT_ID': MS_CLIENT_ID,
-        'MS_CLIENT_SECRET': MS_CLIENT_SECRET,
-        'MS_REFRESH_TOKEN': MS_REFRESH_TOKEN,
-        'MS_ACCOUNT_ID': MS_ACCOUNT_ID,
+        'MS_CAPI_TAG_ID': MS_CAPI_TAG_ID,
+        'MS_CAPI_TOKEN': MS_CAPI_TOKEN,
     }
 
     missing_vars = [var for var, value in required_vars.items() if not value]
