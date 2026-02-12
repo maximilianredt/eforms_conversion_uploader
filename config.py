@@ -49,6 +49,7 @@ LOOKBACK_DAYS = int(os.environ.get('LOOKBACK_DAYS', '30'))
 DRY_RUN = os.environ.get('DRY_RUN', 'false').lower() == 'true'
 CURRENCY_CODE = os.environ.get('CURRENCY_CODE', 'USD')
 MAX_RETRIES = int(os.environ.get('MAX_RETRIES', '3'))
+ENABLE_ENHANCED_CONVERSIONS = os.environ.get('ENABLE_ENHANCED_CONVERSIONS', 'true').lower() == 'true'
 
 # --- Mappings ---
 # Event type -> Google Ads conversion action name
@@ -99,4 +100,5 @@ def validate_env_vars():
 
     logger.info("All required environment variables are set")
     logger.info(f"Config: SEND_RENEWAL_PAYMENTS={SEND_RENEWAL_PAYMENTS}, "
-                f"LOOKBACK_DAYS={LOOKBACK_DAYS}, DRY_RUN={DRY_RUN}")
+                f"LOOKBACK_DAYS={LOOKBACK_DAYS}, DRY_RUN={DRY_RUN}, "
+                f"ENABLE_ENHANCED_CONVERSIONS={ENABLE_ENHANCED_CONVERSIONS}")

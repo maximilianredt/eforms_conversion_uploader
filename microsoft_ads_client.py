@@ -5,6 +5,7 @@ import logging
 from bingads.service_client import ServiceClient
 from bingads.authorization import AuthorizationData, OAuthWebAuthCodeGrant
 
+from hashing import normalize_and_hash_email
 from config import (
     MS_DEV_TOKEN,
     MS_CLIENT_ID,
@@ -92,6 +93,12 @@ def upload_offline_conversions(
             oc.ConversionTime = _format_datetime(conv['conversion_time'])
             oc.ConversionValue = float(conv['value'])
             oc.ConversionCurrencyCode = CURRENCY_CODE
+
+            # Enhanced conversions: set hashed email if available
+            hashed_email = normalize_and_hash_email(conv.get('email'))
+            if hashed_email:
+                oc.HashedEmailAddress = hashed_email
+
             offline_conversions.OfflineConversion.append(oc)
 
         try:

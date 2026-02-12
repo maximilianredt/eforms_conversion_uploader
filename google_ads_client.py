@@ -13,6 +13,7 @@ from config import (
     GOOGLE_ADS_LOGIN_CUSTOMER_ID,
     CURRENCY_CODE,
 )
+from hashing import normalize_and_hash_email, normalize_and_hash_name
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,59 @@ def _get_conversion_action_resource(client: GoogleAdsClient, customer_id: str, a
     raise ValueError(f"Conversion action '{action_name}' not found in Google Ads account {customer_id}")
 
 
+def _build_user_identifiers(client: GoogleAdsClient, conv: dict) -> list:
+    """Build UserIdentifier objects from PII fields in the conversion dict.
+
+    Returns a list of UserIdentifier proto objects for Enhanced Conversions.
+    Returns empty list if no PII is available.
+    """
+    identifiers = []
+
+    # Email identifier
+    hashed_email = normalize_and_hash_email(conv.get('email'))
+    if hashed_email:
+        ui = client.get_type("UserIdentifier")
+        ui.user_identifier_source = client.enums.UserIdentifierSourceEnum.FIRST_PARTY
+        ui.hashed_email = hashed_email
+        identifiers.append(ui)
+
+    # Address-based identifier (name + address components)
+    hashed_first = normalize_and_hash_name(conv.get('first_name'))
+    hashed_last = normalize_and_hash_name(conv.get('last_name'))
+
+    if hashed_first or hashed_last:
+        ui = client.get_type("UserIdentifier")
+        ui.user_identifier_source = client.enums.UserIdentifierSourceEnum.FIRST_PARTY
+        address_info = client.get_type("OfflineUserAddressInfo")
+
+        if hashed_first:
+            address_info.hashed_first_name = hashed_first
+        if hashed_last:
+            address_info.hashed_last_name = hashed_last
+
+        # These fields are NOT hashed per Google's spec
+        city = conv.get('city')
+        if city and str(city).strip():
+            address_info.city = str(city).strip()
+
+        state = conv.get('state')
+        if state and str(state).strip():
+            address_info.state = str(state).strip()
+
+        country = conv.get('country')
+        if country and str(country).strip():
+            address_info.country_code = str(country).strip().upper()
+
+        zip_code = conv.get('zip_code')
+        if zip_code and str(zip_code).strip():
+            address_info.postal_code = str(zip_code).strip()
+
+        ui.address_info = address_info
+        identifiers.append(ui)
+
+    return identifiers
+
+
 def upload_click_conversions(
     client: GoogleAdsClient,
     conversions: list[dict],
@@ -108,6 +162,11 @@ def upload_click_conversions(
             click_conversion.conversion_value = float(conv['value'])
             click_conversion.currency_code = CURRENCY_CODE
             click_conversion.order_id = conv['event_id']
+
+            # Enhanced conversions: attach user identifiers if PII available
+            for uid in _build_user_identifiers(client, conv):
+                click_conversion.user_identifiers.append(uid)
+
             request.conversions.append(click_conversion)
 
         try:

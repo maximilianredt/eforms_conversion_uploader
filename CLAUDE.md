@@ -23,6 +23,7 @@ Cloud Scheduler (daily 8:30 AM CET)
 - `bq_client.py` — BigQuery client, table creation, query execution, result logging via `insert_rows_json`.
 - `google_ads_client.py` — Google Ads client. Uses **service account auth** (JSON key file from `../dbt/bigquery_service_key.json`). Looks up conversion action resource names by name (cached). Handles partial failures per-event.
 - `microsoft_ads_client.py` — Microsoft Ads client. Same OAuth credentials as `../bing_ads_importer/main.py`. Uses SOAP factory for OfflineConversion objects.
+- `hashing.py` — SHA-256 hashing utilities for Enhanced Conversions. Email normalization (Gmail dot/plus handling) and name normalization. Used by both platform clients.
 - `deploy.sh` — Builds container + deploys Cloud Run Job with env vars from `.env`.
 
 ## Key Design Decisions
@@ -39,6 +40,16 @@ No event-level click ID resolution — simpler and leverages dbt attribution log
 
 ### Refund Handling
 Refunds are sent as **retractions on the original conversion action** (not a separate action). Matched to original via `user_id` in `ad_conversion_log`. Google Ads uses `order_id` (set to `event_id` on initial upload). Microsoft Ads matches by `msclkid` + `ConversionTime`.
+
+### Enhanced Conversions
+Both platforms receive SHA-256 hashed PII alongside click IDs for better match rates:
+- **Google Ads**: `UserIdentifier` protos on `ClickConversion.user_identifiers` — hashed email, hashed first/last name, plus unhashed city/state/country/zip via `OfflineUserAddressInfo`
+- **Microsoft Ads**: `HashedEmailAddress` field on `OfflineConversion` SOAP object (email only)
+- PII sourced from `dim_users` (100% email, ~65% name, ~18% city, ~25% zip)
+- Gmail normalization: remove dots and plus-suffixes from username for @gmail.com/@googlemail.com
+- Controlled by `ENABLE_ENHANCED_CONVERSIONS` env var (default `true`)
+- PII is NOT stored in `ad_conversion_log`
+- Refunds/retractions do NOT use enhanced data (not needed)
 
 ### Chat vs Document Purchases
 Both are `payment_source='order'` in `fct_payments`. Chat has `plan_code='10'`, everything else is a document purchase.
@@ -71,6 +82,7 @@ Key env vars (see `.env.example` for full list):
 - `DRY_RUN` (default `false`) — queries run but no API calls made
 - `LOOKBACK_DAYS` (default `30`) — how far back to scan for unsent events
 - `MAX_RETRIES` (default `3`) — failed events retried up to this many times
+- `ENABLE_ENHANCED_CONVERSIONS` (default `true`) — send hashed PII alongside click IDs for better match rates
 
 ## Environment
 

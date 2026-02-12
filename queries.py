@@ -79,7 +79,14 @@ def get_unsent_trial_starts_query(lookback_days: int, max_retries: int, skip_ded
         ts.trial_started_at AS conversion_time,
         0.0 AS conversion_value,
         COALESCE(du.conversion_gclid, da.first_touch_gclid) AS gclid,
-        COALESCE(du.conversion_msclkid, da.first_touch_msclkid) AS msclkid
+        COALESCE(du.conversion_msclkid, da.first_touch_msclkid) AS msclkid,
+        du.email,
+        du.first_name,
+        du.last_name,
+        du.city,
+        du.state,
+        du.country,
+        du.zip_code
     FROM {TRIAL_TABLE} ts
     LEFT JOIN {DIM_USERS_TABLE} du ON ts.user_id = du.user_id
     LEFT JOIN {DIM_ATTRIBUTION_TABLE} da ON ts.user_id = da.user_id
@@ -117,7 +124,14 @@ def get_unsent_subscriptions_query(lookback_days: int, max_retries: int, include
         p.payment_at AS conversion_time,
         p.amount AS conversion_value,
         COALESCE(du.conversion_gclid, da.first_touch_gclid) AS gclid,
-        COALESCE(du.conversion_msclkid, da.first_touch_msclkid) AS msclkid
+        COALESCE(du.conversion_msclkid, da.first_touch_msclkid) AS msclkid,
+        du.email,
+        du.first_name,
+        du.last_name,
+        du.city,
+        du.state,
+        du.country,
+        du.zip_code
     FROM {PAYMENTS_TABLE} p
     LEFT JOIN {DIM_USERS_TABLE} du ON p.user_id = du.user_id
     LEFT JOIN {DIM_ATTRIBUTION_TABLE} da ON p.user_id = da.user_id
@@ -151,7 +165,14 @@ def get_unsent_document_purchases_query(lookback_days: int, max_retries: int, sk
         p.payment_at AS conversion_time,
         p.amount AS conversion_value,
         COALESCE(du.conversion_gclid, da.first_touch_gclid) AS gclid,
-        COALESCE(du.conversion_msclkid, da.first_touch_msclkid) AS msclkid
+        COALESCE(du.conversion_msclkid, da.first_touch_msclkid) AS msclkid,
+        du.email,
+        du.first_name,
+        du.last_name,
+        du.city,
+        du.state,
+        du.country,
+        du.zip_code
     FROM {PAYMENTS_TABLE} p
     LEFT JOIN {DIM_USERS_TABLE} du ON p.user_id = du.user_id
     LEFT JOIN {DIM_ATTRIBUTION_TABLE} da ON p.user_id = da.user_id
@@ -186,7 +207,14 @@ def get_unsent_chat_purchases_query(lookback_days: int, max_retries: int, skip_d
         p.payment_at AS conversion_time,
         p.amount AS conversion_value,
         COALESCE(du.conversion_gclid, da.first_touch_gclid) AS gclid,
-        COALESCE(du.conversion_msclkid, da.first_touch_msclkid) AS msclkid
+        COALESCE(du.conversion_msclkid, da.first_touch_msclkid) AS msclkid,
+        du.email,
+        du.first_name,
+        du.last_name,
+        du.city,
+        du.state,
+        du.country,
+        du.zip_code
     FROM {PAYMENTS_TABLE} p
     LEFT JOIN {DIM_USERS_TABLE} du ON p.user_id = du.user_id
     LEFT JOIN {DIM_ATTRIBUTION_TABLE} da ON p.user_id = da.user_id

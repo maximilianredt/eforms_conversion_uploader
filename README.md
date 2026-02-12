@@ -18,8 +18,24 @@ Syncs offline conversion data from BigQuery to Google Ads and Microsoft Ads. Run
 1. Queries BigQuery for new events with click IDs (GCLID/MSCLKID)
 2. Checks `ad_conversion_log` table to skip already-sent events (idempotent)
 3. Uploads conversions to Google Ads (via GCLID) and Microsoft Ads (via MSCLKID)
-4. Logs results to `ad_conversion_log` for tracking and deduplication
-5. Sends refund retractions for previously-uploaded conversions
+4. Attaches hashed PII (Enhanced Conversions) for better match rates
+5. Logs results to `ad_conversion_log` for tracking and deduplication
+6. Sends refund retractions for previously-uploaded conversions
+
+## Enhanced Conversions
+
+Both platforms support **Enhanced Conversions** — sending hashed user PII alongside click IDs for better conversion match rates. All PII is SHA-256 hashed before leaving our system.
+
+| Platform | Data Sent (all hashed) |
+|----------|----------------------|
+| Google Ads | Email, first name, last name + unhashed city, state, country, zip |
+| Microsoft Ads | Email only |
+
+- Controlled by `ENABLE_ENHANCED_CONVERSIONS` env var (default: `true`)
+- PII is sourced from `dim_users` (100% email coverage, ~65% name coverage)
+- PII is **not** stored in `ad_conversion_log` — only hashed and sent to platforms
+- Gmail-specific normalization applied (dot removal, plus-suffix stripping)
+- Graceful degradation: missing fields are simply omitted
 
 ## Prerequisites
 
@@ -99,6 +115,7 @@ set -a && source .env && set +a && python main.py
 | `DRY_RUN` | `false` | Query events but don't call ad platform APIs |
 | `MAX_RETRIES` | `3` | Max retry attempts for failed events |
 | `CURRENCY_CODE` | `USD` | Currency for all conversion values |
+| `ENABLE_ENHANCED_CONVERSIONS` | `true` | Send hashed PII for better match rates |
 
 ## Monitoring
 

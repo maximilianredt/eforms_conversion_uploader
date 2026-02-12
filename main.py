@@ -15,6 +15,7 @@ from config import (
     GADS_ACTION_MAP,
     MSADS_GOAL_MAP,
     CURRENCY_CODE,
+    ENABLE_ENHANCED_CONVERSIONS,
 )
 from bq_client import get_client, ensure_log_table, run_query, log_conversion_results
 from queries import (
@@ -90,6 +91,19 @@ def process_event_type(
                         'conversion_time': e['conversion_time'],
                         'value': e.get('conversion_value', 0),
                         'event_type': e['event_type'],
+                        **(
+                            {
+                                'email': e.get('email'),
+                                'first_name': e.get('first_name'),
+                                'last_name': e.get('last_name'),
+                                'city': e.get('city'),
+                                'state': e.get('state'),
+                                'country': e.get('country'),
+                                'zip_code': e.get('zip_code'),
+                            }
+                            if ENABLE_ENHANCED_CONVERSIONS
+                            else {}
+                        ),
                     }
                     for e in google_events
                 ]
@@ -143,6 +157,11 @@ def process_event_type(
                         'conversion_time': e['conversion_time'],
                         'value': e.get('conversion_value', 0),
                         'conversion_goal_name': MSADS_GOAL_MAP.get(e['event_type']),
+                        **(
+                            {'email': e.get('email')}
+                            if ENABLE_ENHANCED_CONVERSIONS
+                            else {}
+                        ),
                     }
                     for e in microsoft_events
                 ]
